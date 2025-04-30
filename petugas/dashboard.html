@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Petugas - Monitoring Kebersihan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        .bg-custom {
+            background-image: url('https://files.catbox.moe/i60za1.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+    </style>
+</head>
+<body class="bg-custom min-h-screen">
+    <div class="container mx-auto p-4">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">Dashboard Petugas</h1>
+                    <p class="text-gray-600" id="current-date-time">Loading waktu...</p>
+                </div>
+                <div class="mt-4 md:mt-0">
+                    <div class="flex items-center">
+                        <div class="mr-4">
+                            <p class="text-sm font-medium text-gray-700">Status:</p>
+                            <p id="status-text" class="font-semibold text-yellow-500">Belum Absen</p>
+                        </div>
+                        <button id="logout-button" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Panel - Absensi -->
+            <div class="col-span-1">
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Absensi</h2>
+                    <div class="mb-4">
+                        <div id="clock-display" class="text-4xl font-bold text-center mb-2">00:00:00</div>
+                        <div id="timer-display" class="text-lg text-center mb-4 hidden">
+                            Sisa waktu: <span id="timer-value" class="font-semibold">08:00:00</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <button id="absen-masuk" class="bg-green-500 text-white p-3 rounded-md hover:bg-green-600 flex items-center justify-center">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Absen Masuk
+                        </button>
+                        <button id="absen-keluar" class="bg-blue-500 text-white p-3 rounded-md hover:bg-blue-600 flex items-center justify-center" disabled>
+                            <i class="fas fa-sign-out-alt mr-2"></i>Absen Keluar
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Location Info -->
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Lokasi Saat Ini</h2>
+                    <div class="flex items-center justify-between mb-4">
+                        <p id="location-text" class="text-gray-700">Memuat lokasi...</p>
+                        <button id="refresh-gps" class="bg-gray-200 text-gray-700 p-2 rounded-md hover:bg-gray-300">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                    <div id="map-container" class="w-full h-40 bg-gray-100 rounded-md flex items-center justify-center">
+                        <p class="text-gray-500">Peta lokasi</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Upload Dokumentasi -->
+            <div class="col-span-1 lg:col-span-2">
+                <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                    <h2 class="text-xl font-semibold mb-4">Upload Dokumentasi Kerja</h2>
+                    <form id="dokumentasi-form" class="space-y-4">
+                        <div>
+                            <label for="deskripsi" class="block text-sm font-medium text-gray-700 mb-1">Deskripsi Kerja:</label>
+                            <select id="deskripsi" name="deskripsi" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500">
+                                <option value="">- Pilih Deskripsi Kerja -</option>
+                                <option value="pembersihan_jalan">Pembersihan Jalan</option>
+                                <option value="pembersihan_taman">Pembersihan Taman</option>
+                                <option value="pengangkutan_sampah">Pengangkutan Sampah</option>
+                                <option value="pembersihan_selokan">Pembersihan Selokan</option>
+                                <option value="pemotongan_rumput">Pemotongan Rumput</option>
+                                <option value="lainnya">Lainnya</option>
+                            </select>
+                        </div>
+                        
+                        <div id="deskripsi-lainnya-container" class="hidden">
+                            <label for="deskripsi-lainnya" class="block text-sm font-medium text-gray-700 mb-1">Deskripsi Lainnya:</label>
+                            <input type="text" id="deskripsi-lainnya" name="deskripsi-lainnya" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500">
+                        </div>
+                        
+                        <div>
+                            <label for="catatan" class="block text-sm font-medium text-gray-700 mb-1">Catatan Tambahan:</label>
+                            <textarea id="catatan" name="catatan" rows="3" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Upload Foto:</label>
+                            <div class="flex items-center justify-center w-full">
+                                <label for="foto-upload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
+                                        <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Klik untuk upload</span> atau drag and drop</p>
+                                        <p class="text-xs text-gray-500">PNG, JPG (MAX. 5MB)</p>
+                                    </div>
+                                    <input id="foto-upload" type="file" class="hidden" accept="image/*" multiple />
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div id="preview-container" class="hidden">
+                            <p class="text-sm font-medium text-gray-700 mb-2">Preview:</p>
+                            <div id="image-preview" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+                        </div>
+                        
+                        <div class="flex justify-end">
+                            <button type="submit" id="submit-dokumentasi" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600" disabled>
+                                <i class="fas fa-paper-plane mr-2"></i>Submit Dokumentasi
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Riwayat Aktivitas -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold mb-4">Riwayat Aktivitas Hari Ini</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead>
+                                <tr>
+                                    <th class="py-2 px-4 border-b text-left">Waktu</th>
+                                    <th class="py-2 px-4 border-b text-left">Aktivitas</th>
+                                    <th class="py-2 px-4 border-b text-left">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="aktivitas-table">
+                                <tr>
+                                    <td colspan="3" class="py-4 text-center text-gray-500">Belum ada aktivitas tercatat</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi -->
+    <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+            <h3 class="text-xl font-bold mb-4" id="modal-title">Konfirmasi</h3>
+            <p id="modal-message" class="text-gray-700 mb-4">Apakah Anda yakin?</p>
+            <div class="flex justify-end space-x-4">
+                <button id="modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Batal</button>
+                <button id="modal-confirm" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Konfirmasi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-toast" class="fixed bottom-4 right-4 bg-white shadow-lg rounded-lg p-4 transform transition-transform duration-300 translate-y-20 opacity-0 invisible">
+        <div class="flex items-center">
+            <div id="notification-icon" class="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3">
+                <i class="fas fa-check-circle text-green-500 text-xl"></i>
+            </div>
+            <div>
+                <p id="notification-message" class="font-medium">Berhasil</p>
+                <p id="notification-detail" class="text-sm text-gray-500">Operasi berhasil dilakukan</p>
+            </div>
+            <button id="close-notification" class="ml-6 text-gray-400 hover:text-gray-500">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Inisialisasi Supabase
+        const supabaseUrl = 'https://mztxspcmmcvevngdgxpr.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16dHhzcGNtbWN2ZXZuZ2RneHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5ODQyNzUsImV4cCI6MjA2MTU2MDI3NX0.ej9VAhdlnm41Vw4Ga-XYz0StfioQwY4Nfj9z1D0JO_o';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // DOM Elements
+        const clockDisplay = document.getElementById('clock-display');
+        const timerDisplay = document.getElementById('timer-display');
+        const timerValue = document.getElementById('timer-value');
+        const currentDateTimeElement = document.getElementById('current-date-time');
+        const statusText = document.getElementById('status-text');
+        const locationText = document.getElementById('location-text');
+        const absenMasukBtn = document.getElementById('absen-masuk');
+        const absenKeluarBtn = document.getElementById('absen-keluar');
+        const refreshGpsBtn = document.getElementById('refresh-gps');
+        const submitDokumentasiBtn = document.getElementById('submit-dokumentasi');
+        const logoutButton = document.getElementById('logout-button');
+        const deskripsiSelect = document.getElementById('deskripsi');
+        const deskripsiLainnyaContainer = document.getElementById('deskripsi-lainnya-container');
+        const fotoUpload = document.getElementById('foto-upload');
+        const imagePreview = document.getElementById('image-preview');
+        const previewContainer = document.getElementById('preview-container');
+        const aktivitasTable = document.getElementById('aktivitas-table');
+        
+        // Modal elements
+        const confirmationModal = document.getElementById('confirmation-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCancel = document.getElementById('modal-cancel');
+        const modalConfirm = document.getElementById('modal-confirm');
+        
+        // Toast notification elements
+        const notificationToast = document.getElementById('notification-toast');
+        const notificationIcon = document.getElementById('notification-icon');
+        const notificationMessage = document.getElementById('notification-message');
+        const notificationDetail = document.getElementById('notification-detail');
+        const closeNotification = document.getElementById('close-notification');
+
+        // Variables
+        let currentUser = null;
+        let absensiMasuk = null;
+        let timerInterval = null;
+        let currentPosition = null;
+        let positionWatchId = null;
+        let selectedFiles = [];
+        let modalCallback = null;
+
+        // Load user session and initialize
+        async function initializeApp() {
+            try {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                
+                if (error) {
+                    throw error;
+                }
+                
+                if (!session) {
+                    // Redirect to login if no session
+                    window.location.href = '../index.html';
+                    return;
+                }
+                
+                currentUser = session.user;
+                
+                // Load user data and absensi status
+                await loadUserData();
+                
+                // Start live clock
+                updateTime();
+                setInterval(updateTime, 1000);
+                
+                // Setup geolocation tracking
+                setupGeolocation();
+                
+                // Show notification
+                showNotification('success', 'Login Berhasil', 'Selamat datang di Dashboard Petugas');
+                
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                showNotification('error', 'Error', 'Gagal memuat data pengguna');
+            }
+        }
+
+        // Load user data and absensi status
+        async function loadUserData() {
+            try {
+                // Check today's absensi
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                
+                const { data: absensiData, error: absensiError } = await supabaseClient
+                    .from('absensi')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .eq('tanggal', todayStr)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                
+                if (absensiError) throw absensiError;
+                
+                // Update UI based on absensi status
+                if (absensiData && absensiData.length > 0) {
+                    absensiMasuk = absensiData[0];
+                    
+                    if (absensiMasuk.jam_keluar) {
+                        // Sudah absen keluar
+                        statusText.textContent = 'Selesai';
+                        statusText.className = 'font-semibold text-green-500';
+                        absenMasukBtn.disabled = true;
+                        absenKeluarBtn.disabled = true;
+                        submitDokumentasiBtn.disabled = true;
+                    } else {
+                        // Belum absen keluar
+                        statusText.textContent = 'Sedang Bertugas';
+                        statusText.className = 'font-semibold text-blue-500';
+                        absenMasukBtn.disabled = true;
+                        absenKeluarBtn.disabled = false;
+                        submitDokumentasiBtn.disabled = false;
+                        
+                        // Start timer
+                        startTimer(absensiMasuk.jam_masuk);
+                    }
+                } else {
+                    // Belum absen sama sekali
+                    statusText.textContent = 'Belum Absen';
+                    statusText.className = 'font-semibold text-yellow-500';
+                    absenMasukBtn.disabled = false;
+                    absenKeluarBtn.disabled = true;
+                    submitDokumentasiBtn.disabled = true;
+                }
+                
+                // Load aktivitas
+                await loadAktivitas();
+                
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                showNotification('error', 'Error', 'Gagal memuat data absensi');
+            }
+        }
+
+        // Start timer for 8 hours
+        function startTimer(startTime) {
+            if (!startTime) return;
+            
+            timerDisplay.classList.remove('hidden');
+            const startDateTime = new Date(startTime);
+            const endDateTime = new Date(startDateTime.getTime() + (8 * 60 * 60 * 1000)); // 8 jam
+            
+            function updateTimer() {
+                const now = new Date();
+                const timeDiff = endDateTime - now;
+                
+                if (timeDiff <= 0) {
+                    // Timer selesai
+                    clearInterval(timerInterval);
+                    timerValue.textContent = '00:00:00';
+                    absenKeluarBtn.disabled = false;
+                    
+                    // Update status text to indicate ready for checkout
+                    statusText.textContent = 'Dapat Absen Keluar';
+                    statusText.className = 'font-semibold text-green-500';
+                    
+                    return;
+                }
+                
+                // Format waktu tersisa
+                const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+                const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+                
+                timerValue.textContent = 
+                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Disable absen keluar button if time is less than 8 hours
+                absenKeluarBtn.disabled = timeDiff > 0;
+            }
+            
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        // Update clock and date time
+        function updateTime() {
+            const now = new Date();
+            
+            // Update clock
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const seconds = now.getSeconds().toString().padStart(2, '0');
+            clockDisplay.textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // Update date
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            currentDateTimeElement.textContent = now.toLocaleDateString('id-ID', options);
+        }
+
+        // Setup geolocation tracking
+        function setupGeolocation() {
+            if (navigator.geolocation) {
+                // Get initial position
+                navigator.geolocation.getCurrentPosition(
+                    updatePosition,
+                    handleGeolocationError,
+                    { enableHighAccuracy: true }
+                );
+                
+                // Watch position changes
+                positionWatchId = navigator.geolocation.watchPosition(
+                    updatePosition,
+                    handleGeolocationError,
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                locationText.textContent = 'Geolokasi tidak didukung oleh browser ini';
+            }
+        }
+
+        // Update position info
+        function updatePosition(position) {
+            currentPosition = position;
+            const lat = position.coords.latitude.toFixed(6);
+            const lng = position.coords.longitude.toFixed(6);
+            locationText.textContent = `Lat: ${lat}, Long: ${lng}`;
+            
+            // You can add code to update map here if needed
+        }
+
+        // Handle geolocation errors
+        function handleGeolocationError(error) {
+            console.error('Geolocation error:', error);
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    locationText.textContent = 'Akses lokasi ditolak oleh pengguna';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    locationText.textContent = 'Informasi lokasi tidak tersedia';
+                    break;
+                case error.TIMEOUT:
+                    locationText.textContent = 'Waktu permintaan lokasi habis';
+                    break;
+                default:
+                    locationText.textContent = 'Terjadi kesalahan pada geolokasi';
+                    break;
+            }
+        }
+
+        // Load aktivitas for today
+        async function loadAktivitas() {
+            try {
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                
+                // Get absensi
+                const { data: absensiData, error: absensiError } = await supabaseClient
+                    .from('absensi')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .eq('tanggal', todayStr)
+                    .order('created_at', { ascending: false });
+                
+                if (absensiError) throw absensiError;
+                
+                // Get dokumentasi
+                const { data: dokData, error: dokError } = await supabaseClient
+                    .from('dokumentasi')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .gte('created_at', todayStr)
+                    .lt('created_at', new Date(today.getTime() + 86400000).toISOString().split('T')[0])
+                    .order('created_at', { ascending: false });
+                
+                if (dokError) throw dokError;
+                
+                // Combine and sort
+                const allActivities = [
+                    ...(absensiData || []).map(item => ({
+                        time: new Date(item.jam_masuk || item.created_at),
+                        activity: 'Absen Masuk',
+                        status: 'success',
+                        rawTime: item.jam_masuk || item.created_at
+                    })),
+                    ...(absensiData || [])
+                        .filter(item => item.jam_keluar)
+                        .map(item => ({
+                            time: new Date(item.jam_keluar),
+                            activity: 'Absen Keluar',
+                            status: 'success',
+                            rawTime: item.jam_keluar
+                        })),
+                    ...(dokData || []).map(item => ({
+                        time: new Date(item.created_at),
+                        activity: `Upload Dokumentasi: ${item.deskripsi || 'Tidak ada deskripsi'}`,
+                        status: 'info',
+                        rawTime: item.created_at
+                    }))
+                ].sort((a, b) => b.time - a.time);
+                
+                // Update table
+                if (allActivities.length > 0) {
+                    aktivitasTable.innerHTML = '';
+                    allActivities.forEach(activity => {
+                        const timeStr = new Date(activity.rawTime).toLocaleTimeString('id-ID');
+                        const statusClass = 
+                            activity.status === 'success' ? 'bg-green-100 text-green-800' : 
+                            activity.status === 'info' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100';
+                        
+                        aktivitasTable.innerHTML += `
+                            <tr>
+                                <td class="py-2 px-4 border-b">${timeStr}</td>
+                                <td class="py-2 px-4 border-b">${activity.activity}</td>
+                                <td class="py-2 px-4 border-b">
+                                    <span class="px-2 py-1 rounded-full text-xs ${statusClass}">
+                                        ${activity.status === 'success' ? 'Sukses' : 'Info'}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    aktivitasTable.innerHTML = `
+                        <tr>
+                            <td colspan="3" class="py-4 text-center text-gray-500">Belum ada aktivitas tercatat</td>
+                        </tr>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error loading aktivitas:', error);
+            }
+        }
+
+        // Handle absen masuk
+        async function handleAbsenMasuk() {
+            if (!currentPosition) {
+                showNotification('error', 'Error', 'Lokasi tidak ditemukan. Mohon aktifkan GPS.');
+                return;
+            }
+            
+            showModal('Konfirmasi Absen Masuk', 'Apakah Anda yakin ingin melakukan absen masuk?', async () => {
+                try {
+                    const now = new Date();
+                    const today = now.toISOString().split('T')[0];
+                    
+                    // Record absensi
+                    const { data, error } = await supabaseClient
+                        .from('absensi')
+                        .insert([{
+                            user_id: currentUser.id,
+                            tanggal: today,
+                            jam_masuk: now.toISOString(),
+                            lokasi_masuk: `${currentPosition.coords.latitude},${currentPosition.coords.longitude}`,
+                            created_at: now.toISOString()
+                        }])
+                        .select();
+                    
+                    if (error) throw error;
+                    
+                    absensiMasuk = data[0];
+                    
+                    // Update UI
+                    statusText.textContent = 'Sedang Bertugas';
+                    statusText.className = 'font-semibold text-blue-500';
+                    absenMasukBtn.disabled = true;
+                    
+                    // Start timer
+                    startTimer(absensiMasuk.jam_masuk);
+                    
+                    // Load aktivitas
+                    await loadAktivitas();
+                    
+                    showNotification('success', 'Berhasil', 'Absen masuk berhasil dicatat');
+                } catch (error) {
+                    console.error('Error absen masuk:', error);
+                    showNotification('error', 'Error', 'Gagal melakukan absen masuk');
+                }
+            });
+        }
+
+        // Script tambahan untuk memperbaiki event listener button dan GPS realtime
+// Tambahkan kode ini di bagian script file dashboard.html
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the app
+    initializeApp();
+    
+    // Add event listeners
+    absenMasukBtn.addEventListener('click', handleAbsenMasuk);
+    absenKeluarBtn.addEventListener('click', handleAbsenKeluar);
+    refreshGpsBtn.addEventListener('click', refreshGeolocation);
+    logoutButton.addEventListener('click', handleLogout);
+    
+    // Dokumentasi form event listeners
+    deskripsiSelect.addEventListener('change', function() {
+        if (this.value === 'lainnya') {
+            deskripsiLainnyaContainer.classList.remove('hidden');
+        } else {
+            deskripsiLainnyaContainer.classList.add('hidden');
+        }
+    });
+    
+    fotoUpload.addEventListener('change', handleFileSelect);
+    document.getElementById('dokumentasi-form').addEventListener('submit', handleSubmitDokumentasi);
+    
+    // Modal event listeners
+    modalCancel.addEventListener('click', hideModal);
+    
+    // Notification event listener
+    closeNotification.addEventListener('click', hideNotification);
+});
+
+// Refresh geolocation function
+function refreshGeolocation() {
+    if (navigator.geolocation) {
+        locationText.textContent = 'Memperbarui lokasi...';
+        
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                updatePosition(position);
+                showNotification('success', 'Lokasi Diperbarui', 'Koordinat GPS berhasil diperbarui');
+            },
+            function(error) {
+                handleGeolocationError(error);
+                showNotification('error', 'Error GPS', 'Gagal memperbarui lokasi');
+            },
+            { 
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+    } else {
+        showNotification('error', 'Error', 'Geolokasi tidak didukung browser ini');
+    }
+}
+
+// Improved position update function
+function updatePosition(position) {
+    currentPosition = position;
+    const lat = position.coords.latitude.toFixed(6);
+    const lng = position.coords.longitude.toFixed(6);
+    locationText.textContent = `Lat: ${lat}, Long: ${lng}`;
+    
+    // Update Map Container with basic text info
+    const mapContainer = document.getElementById('map-container');
+    mapContainer.innerHTML = `
+        <div class="text-center p-2">
+            <p class="font-semibold text-blue-600">Lokasi Anda:</p>
+            <p class="text-gray-700">Latitude: ${lat}</p>
+            <p class="text-gray-700">Longitude: ${lng}</p>
+            <p class="text-sm text-gray-500 mt-2">Akurasi: ±${Math.round(position.coords.accuracy)} meter</p>
+        </div>
+    `;
+}
+
+// Handle file select for dokumentasi
+function handleFileSelect(event) {
+    const files = event.target.files;
+    if (!files.length) return;
+    
+    selectedFiles = Array.from(files);
+    
+    // Clear preview
+    imagePreview.innerHTML = '';
+    
+    // Create and show previews
+    selectedFiles.forEach(file => {
+        if (!file.type.match('image.*')) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.className = 'w-full h-40 object-cover rounded-md';
+            
+            const div = document.createElement('div');
+            div.className = 'relative';
+            div.appendChild(img);
+            
+            imagePreview.appendChild(div);
+        };
+        reader.readAsDataURL(file);
+    });
+    
+    previewContainer.classList.remove('hidden');
+    
+    // Enable submit button if absen masuk is done
+    if (absensiMasuk && !absensiMasuk.jam_keluar) {
+        submitDokumentasiBtn.disabled = false;
+    }
+}
+
+// Handle submit dokumentasi
+async function handleSubmitDokumentasi(event) {
+    event.preventDefault();
+    
+    if (!currentPosition) {
+        showNotification('error', 'Error', 'Lokasi tidak ditemukan. Mohon aktifkan GPS.');
+        return;
+    }
+    
+    const deskripsi = deskripsiSelect.value;
+    if (!deskripsi) {
+        showNotification('error', 'Error', 'Pilih deskripsi kerja terlebih dahulu');
+        return;
+    }
+    
+    if (deskripsi === 'lainnya' && !document.getElementById('deskripsi-lainnya').value.trim()) {
+        showNotification('error', 'Error', 'Masukkan deskripsi lainnya');
+        return;
+    }
+    
+    if (selectedFiles.length === 0) {
+        showNotification('error', 'Error', 'Upload minimal 1 foto');
+        return;
+    }
+    
+    const finalDeskripsi = deskripsi === 'lainnya' ? 
+        document.getElementById('deskripsi-lainnya').value.trim() : 
+        deskripsi;
+    
+    showModal('Konfirmasi Upload', 'Apakah Anda yakin ingin mengirim dokumentasi?', async () => {
+        try {
+            const now = new Date();
+            const catatan = document.getElementById('catatan').value.trim();
+            
+            // Upload photos to storage
+            const uploadPromises = selectedFiles.map(async (file, index) => {
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${currentUser.id}/${now.getTime()}_${index}.${fileExt}`;
+                const { error: uploadError, data } = await supabaseClient.storage
+                    .from('dokumentasi')
+                    .upload(fileName, file);
+                
+                if (uploadError) throw uploadError;
+                
+                return {
+                    path: fileName,
+                    name: file.name,
+                    type: file.type,
+                    size: file.size
+                };
+            });
+            
+            const uploadedFiles = await Promise.all(uploadPromises);
+            
+            // Save dokumentasi to database
+            const { data, error } = await supabaseClient
+                .from('dokumentasi')
+                .insert([{
+                    user_id: currentUser.id,
+                    deskripsi: finalDeskripsi,
+                    catatan: catatan || null,
+                    lokasi: `${currentPosition.coords.latitude},${currentPosition.coords.longitude}`,
+                    foto: uploadedFiles,
+                    created_at: now.toISOString()
+                }]);
+            
+            if (error) throw error;
+            
+            // Reset form
+            document.getElementById('dokumentasi-form').reset();
+            selectedFiles = [];
+            imagePreview.innerHTML = '';
+            previewContainer.classList.add('hidden');
+            
+            // Load aktivitas
+            await loadAktivitas();
+            
+            showNotification('success', 'Berhasil', 'Dokumentasi berhasil diupload');
+        } catch (error) {
+            console.error('Error submit dokumentasi:', error);
+            showNotification('error', 'Error', 'Gagal mengirim dokumentasi');
+        }
+    });
+}
+
+// Logout function
+async function handleLogout() {
+    showModal('Konfirmasi Logout', 'Apakah Anda yakin ingin logout dari sistem?', async () => {
+        try {
+            const { error } = await supabaseClient.auth.signOut();
+            if (error) throw error;
+            
+            // Clear watch position
+            if (positionWatchId) {
+                navigator.geolocation.clearWatch(positionWatchId);
+            }
+            
+            // Redirect to login
+            window.location.href = '../index.html';
+        } catch (error) {
+            console.error('Error during logout:', error);
+            showNotification('error', 'Error', 'Gagal logout. Coba lagi.');
+        }
+    });
+}
+
+// Show modal function
+function showModal(title, message, confirmCallback) {
+    modalTitle.textContent = title;
+    modalMessage.textContent = message;
+    modalCallback = confirmCallback;
+    
+    confirmationModal.classList.remove('hidden');
+    
+    // Setup modal confirm button
+    modalConfirm.onclick = function() {
+        hideModal();
+        if (modalCallback) modalCallback();
+    };
+}
+
+// Hide modal function
+function hideModal() {
+    confirmationModal.classList.add('hidden');
+}
+
+// Show notification
+function showNotification(type, message, detail) {
+    // Set icon
+    if (type === 'success') {
+        notificationIcon.innerHTML = '<i class="fas fa-check-circle text-green-500 text-xl"></i>';
+        notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-green-100';
+    } else if (type === 'error') {
+        notificationIcon.innerHTML = '<i class="fas fa-times-circle text-red-500 text-xl"></i>';
+        notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-red-100';
+    } else if (type === 'warning') {
+        notificationIcon.innerHTML = '<i class="fas fa-exclamation-circle text-yellow-500 text-xl"></i>';
+        notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-yellow-100';
+    } else {
+        notificationIcon.innerHTML = '<i class="fas fa-info-circle text-blue-500 text-xl"></i>';
+        notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-blue-100';
+    }
+    
+    // Set message
+    notificationMessage.textContent = message;
+    notificationDetail.textContent = detail;
+    
+    // Show notification
+    notificationToast.classList.remove('invisible', 'opacity-0', 'translate-y-20');
+    
+    // Hide after 5 seconds
+    setTimeout(hideNotification, 5000);
+}
+
+// Hide notification
+function hideNotification() {
+    notificationToast.classList.add('invisible', 'opacity-0', 'translate-y-20');
+}
+
+        // Handle absen keluar
+        async function handleAbsenKeluar() {
+            if (!currentPosition) {
+                showNotification('error', 'Error', 'Lokasi tidak ditemukan. Mohon aktifkan GPS.');
+                return;
+            }
+            
+            // Check if 8 hours have passed
+            if (absensiMasuk) {
+                const masukTime = new Date(absensiMasuk.jam_masuk);
+                const now = new Date();
+                const diffMs = now - masukTime;
+                const diffHours = diffMs / (1000 * 60 * 60);
+                
+                if (diffHours < 8) {
+                    showNotification('error', 'Belum Bisa Absen Keluar', 'Minimal 8 jam setelah absen masuk');
+                    return;
+                }
+            }
+            
+            showModal('Konfirmasi Absen Keluar', 'Apakah Anda yakin ingin melakukan absen keluar?', async () => {
+                try {
+                    const now = new Date();
+                    
+                    // Update absensi
+                    const { error } = await supabaseClient
+                        .from('absensi')
+                        .update({
+                            jam_keluar: now.toISOString(),
+                            lokasi_keluar: `${currentPosition.coords.latitude},${currentPosition.coords.longitude}`,
+                            updated_at: now.toISOString()
+                        })
+                        .eq('id', absensiMasuk.id);
+                    
+                    if (error) throw error;
+                    
+                    // Update UI
+                    statusText.textContent = 'Selesai';
+                    statusText.className = 'font-semibold text-green-500';
+                    absenKeluarBtn.disabled = true;
+                    submitDokumentasiBtn.disabled = true;
+                    
+                    // Stop timer
+                    if (timerInterval) {
+                        clearInterval(timerInterval);
+                        timerDisplay.classList.add('hidden');
+                    }
+                    
+                    // Load aktivitas
+                    await loadAktivitas();
+                    
+                    showNotification('success', 'Berhasil', 'Absen keluar berhasil dicatat');
+                } catch (error) {
+                    console.error('Error absen keluar:', error);
+                    showNotification('error', 'Error', 'Gagal melakukan absen keluar');
+                }
+            });
+        }
