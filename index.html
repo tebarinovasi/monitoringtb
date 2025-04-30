@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Monitoring Kebersihan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.js"></script>
+    <style>
+        /* Menambahkan background image */
+        .bg-custom {
+            background-image: url('https://files.catbox.moe/i60za1.jpg');
+            background-size: cover;
+            background-position: center;
+        }
+    </style>
+</head>
+<body class="bg-custom flex items-center justify-center h-screen">
+    <div class="bg-white p-8 rounded-lg shadow-md w-96">
+        <h2 class="text-2xl font-bold text-center mb-6">Login</h2>
+        <form id="login-form">
+            <div class="mb-4">
+                <label for="username" class="block text-sm font-medium text-gray-700">Username:</label>
+                <input type="text" id="username" name="username" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label for="password" class="block text-sm font-medium text-gray-700">Password:</label>
+                <input type="password" id="password" name="password" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500">
+            </div>
+            <button type="submit" class="w-full bg-blue-500 text-white p-2 rounded-md hover:bg-blue-600">Masuk</button>
+        </form>
+        <div id="message" class="mt-4 text-center text-red-500"></div>
+    </div>
+
+    <script>
+        // Inisialisasi Supabase
+        const supabaseUrl = 'https://mztxspcmmcvevngdgxpr.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16dHhzcGNtbWN2ZXZuZ2RneHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5ODQyNzUsImV4cCI6MjA2MTU2MDI3NX0.ej9VAhdlnm41Vw4Ga-XYz0StfioQwY4Nfj9z1D0JO_o';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Fungsi untuk menangani login
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('login-form').addEventListener('submit', async function(event) {
+                event.preventDefault(); // Mencegah reload halaman
+
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+                const messageElement = document.getElementById('message');
+
+                try {
+                    // Login dengan Supabase
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({
+                        email: username,
+                        password: password
+                    });
+
+                    if (error) {
+                        messageElement.textContent = error.message;
+                        return;
+                    }
+
+                    messageElement.textContent = 'Login berhasil!';
+                    console.log('User logged in:', data.user);
+                    
+                    // Validasi peran pengguna
+                    try {
+                        // Metode 1: Cek dari tabel users
+                        const { data: userData, error: userError } = await supabaseClient
+                            .from('users')
+                            .select('role')
+                            .eq('user_id', data.user.id)
+                            .single();
+                        
+                        if (!userError && userData && userData.role) {
+                            redirectBasedOnRole(userData.role, messageElement);
+                            return;
+                        }
+                        
+                        // Metode 2: Cek dari metadata
+                        const { data: authData } = await supabaseClient.auth.getUser();
+                        if (authData && authData.user && authData.user.user_metadata && authData.user.user_metadata.role) {
+                            redirectBasedOnRole(authData.user.user_metadata.role, messageElement);
+                            return;
+                        }
+                        
+                        // Metode 3: Cek dari email pattern
+                        if (data.user && data.user.email) {
+                            const isAdmin = data.user.email.includes('admin');
+                            redirectBasedOnRole(isAdmin ? 'admin' : 'petugas', messageElement);
+                            return;
+                        }
+                        
+                        // Fallback default
+                        redirectBasedOnRole('petugas', messageElement);
+                    } catch (roleError) {
+                        console.error('Error checking role:', roleError);
+                        messageElement.textContent = 'Gagal memeriksa peran pengguna';
+                    }
+                } catch (err) {
+                    console.error('Login error:', err);
+                    messageElement.textContent = 'Terjadi kesalahan saat login: ' + (err.message || 'Unknown error');
+                }
+            });
+        });
+        
+        // Fungsi untuk redirect berdasarkan peran
+        function redirectBasedOnRole(role, messageElement) {
+            setTimeout(function() {
+                if (role === 'admin') {
+                    console.log('Redirecting to admin page');
+                    window.location.href = 'admin/dashboard.html';
+                } else if (role === 'petugas') {
+                    console.log('Redirecting to petugas page');
+                    window.location.href = 'petugas/dashboard.html';
+                } else {
+                    messageElement.textContent = 'Peran pengguna tidak valid: ' + role;
+                    console.log('Unknown role:', role);
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
