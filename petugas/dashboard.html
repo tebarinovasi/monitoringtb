@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Petugas - Monitoring Kebersihan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        .bg-custom {
+            background-image: url('https://files.catbox.moe/i60za1.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+    </style>
+</head>
+<body class="bg-custom min-h-screen">
+    <div class="container mx-auto p-4">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">Dashboard Petugas</h1>
+                    <p class="text-gray-600" id="current-date-time">Loading waktu...</p>
+                </div>
+                <div class="mt-4 md:mt-0">
+                    <div class="flex items-center">
+                        <div class="mr-4">
+                            <p class="text-sm font-medium text-gray-700">Status:</p>
+                            <p id="status-text" class="font-semibold text-yellow-500">Belum Absen</p>
+                        </div>
+                        <button id="logout-button" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="grid grid-cols-1 gap-6">
+            <!-- Absensi -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">Absensi</h2>
+                <div class="mb-4">
+                    <div id="clock-display" class="text-4xl font-bold text-center mb-2">00:00:00</div>
+                    <div id="timer-display" class="text-lg text-center mb-4 hidden">
+                        Sisa waktu: <span id="timer-value" class="font-semibold">08:00:00</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <button id="absen-masuk" class="bg-green-500 text-white p-3 rounded-md hover:bg-green-600 flex items-center justify-center">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Absen Masuk
+                    </button>
+                    <button id="absen-keluar" class="bg-blue-500 text-white p-3 rounded-md hover:bg-blue-600 flex items-center justify-center" disabled>
+                        <i class="fas fa-sign-out-alt mr-2"></i>Absen Keluar
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Location Info -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">Lokasi Saat Ini</h2>
+                <div class="flex items-center justify-between mb-4">
+                    <p id="location-text" class="text-gray-700">Memuat lokasi...</p>
+                    <button id="refresh-gps" class="bg-gray-200 text-gray-700 p-2 rounded-md hover:bg-gray-300">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                </div>
+                <div id="map-container" class="w-full h-40 bg-gray-100 rounded-md flex items-center justify-center">
+                    <p class="text-gray-500">Peta lokasi</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi -->
+    <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
+            <h3 class="text-xl font-bold mb-4" id="modal-title">Konfirmasi</h3>
+            <p id="modal-message" class="text-gray-700 mb-4">Apakah Anda yakin?</p>
+            <div class="flex justify-end space-x-4">
+                <button id="modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Batal</button>
+                <button id="modal-confirm" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Konfirmasi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-toast" class="fixed bottom-4 right-4 bg-white shadow-lg rounded-lg p-4 transform transition-transform duration-300 translate-y-20 opacity-0 invisible">
+        <div class="flex items-center">
+            <div id="notification-icon" class="flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3">
+                <i class="fas fa-check-circle text-green-500 text-xl"></i>
+            </div>
+            <div>
+                <p id="notification-message" class="font-medium">Berhasil</p>
+                <p id="notification-detail" class="text-sm text-gray-500">Operasi berhasil dilakukan</p>
+            </div>
+            <button id="close-notification" class="ml-6 text-gray-400 hover:text-gray-500">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Inisialisasi Supabase
+        const supabaseUrl = 'https://mztxspcmmcvevngdgxpr.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16dHhzcGNtbWN2ZXZuZ2RneHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5ODQyNzUsImV4cCI6MjA2MTU2MDI3NX0.ej9VAhdlnm41Vw4Ga-XYz0StfioQwY4Nfj9z1D0JO_o';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // DOM Elements
+        const clockDisplay = document.getElementById('clock-display');
+        const timerDisplay = document.getElementById('timer-display');
+        const timerValue = document.getElementById('timer-value');
+        const currentDateTimeElement = document.getElementById('current-date-time');
+        const statusText = document.getElementById('status-text');
+        const locationText = document.getElementById('location-text');
+        const absenMasukBtn = document.getElementById('absen-masuk');
+        const absenKeluarBtn = document.getElementById('absen-keluar');
+        const refreshGpsBtn = document.getElementById('refresh-gps');
+        const logoutButton = document.getElementById('logout-button');
+        
+        // Modal elements
+        const confirmationModal = document.getElementById('confirmation-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCancel = document.getElementById('modal-cancel');
+        const modalConfirm = document.getElementById('modal-confirm');
+        
+        // Toast notification elements
+        const notificationToast = document.getElementById('notification-toast');
+        const notificationIcon = document.getElementById('notification-icon');
+        const notificationMessage = document.getElementById('notification-message');
+        const notificationDetail = document.getElementById('notification-detail');
+        const closeNotification = document.getElementById('close-notification');
+
+        // Variables
+        let currentUser = null;
+        let absensiMasuk = null;
+        let timerInterval = null;
+        let currentPosition = null;
+        let positionWatchId = null;
+        let modalCallback = null;
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeApp();
+            
+            // Add event listeners to buttons
+            absenMasukBtn.addEventListener('click', handleAbsenMasuk);
+            absenKeluarBtn.addEventListener('click', handleAbsenKeluar);
+            refreshGpsBtn.addEventListener('click', refreshGeolocation);
+            logoutButton.addEventListener('click', handleLogout);
+            
+            // Modal event listeners
+            modalCancel.addEventListener('click', hideModal);
+            
+            // Notification event listener
+            closeNotification.addEventListener('click', hideNotification);
+        });
+
+        // Load user session and initialize
+        async function initializeApp() {
+            try {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                
+                if (error) {
+                    throw error;
+                }
+                
+                if (!session) {
+                    // Redirect to login if no session
+                    window.location.href = '../index.html';
+                    return;
+                }
+                
+                currentUser = session.user;
+                
+                // Load user data and absensi status
+                await loadUserData();
+                
+                // Start live clock
+                updateTime();
+                setInterval(updateTime, 1000);
+                
+                // Setup geolocation tracking
+                setupGeolocation();
+                
+                // Show notification
+                showNotification('success', 'Login Berhasil', 'Selamat datang di Dashboard Petugas');
+                
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                showNotification('error', 'Error', 'Gagal memuat data pengguna');
+            }
+        }
+
+        // Load user data and absensi status
+        async function loadUserData() {
+            try {
+                // Check today's absensi
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                
+                const { data: absensiData, error: absensiError } = await supabaseClient
+                    .from('absensi')
+                    .select('*')
+                    .eq('user_id', currentUser.id)
+                    .eq('tanggal', todayStr)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                
+                if (absensiError) throw absensiError;
+                
+                // Update UI based on absensi status
+                if (absensiData && absensiData.length > 0) {
+                    absensiMasuk = absensiData[0];
+                    
+                    if (absensiMasuk.jam_keluar) {
+                        // Sudah absen keluar
+                        statusText.textContent = 'Selesai';
+                        statusText.className = 'font-semibold text-green-500';
+                        absenMasukBtn.disabled = true;
+                        absenKeluarBtn.disabled = true;
+                    } else {
+                        // Belum absen keluar
+                        statusText.textContent = 'Sedang Bertugas';
+                        statusText.className = 'font-semibold text-blue-500';
+                        absenMasukBtn.disabled = true;
+                        absenKeluarBtn.disabled = false;
+                        
+                        // Start timer
+                        startTimer(absensiMasuk.jam_masuk);
+                    }
+                } else {
+                    // Belum absen sama sekali
+                    statusText.textContent = 'Belum Absen';
+                    statusText.className = 'font-semibold text-yellow-500';
+                    absenMasukBtn.disabled = false;
+                    absenKeluarBtn.disabled = true;
+                }
+                
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                showNotification('error', 'Error', 'Gagal memuat data absensi');
+            }
+        }
+
+        // Start timer for 8 hours
+        function startTimer(startTime) {
+            if (!startTime) return;
+            
+            timerDisplay.classList.remove('hidden');
+            const startDateTime = new Date(startTime);
+            const endDateTime = new Date(startDateTime.getTime() + (8 * 60 * 60 * 1000)); // 8 jam
+            
+            function updateTimer() {
+                const now = new Date();
+                const timeDiff = endDateTime - now;
+                
+                if (timeDiff <= 0) {
+                    // Timer selesai
+                    clearInterval(timerInterval);
+                    timerValue.textContent = '00:00:00';
+                    absenKeluarBtn.disabled = false;
+                    
+                    // Update status text to indicate ready for checkout
+                    statusText.textContent = 'Dapat Absen Keluar';
+                    statusText.className = 'font-semibold text-green-500';
+                    
+                    return;
+                }
+                
+                // Format waktu tersisa
+                const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+                const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+                
+                timerValue.textContent = 
+                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Disable absen keluar button if time is less than 8 hours
+                absenKeluarBtn.disabled = timeDiff > 0;
+            }
+            
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        // Update clock and date time
+        function updateTime() {
+            const now = new Date();
+            
+            // Update clock
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const seconds = now.getSeconds().toString().padStart(2, '0');
+            clockDisplay.textContent = `${hours}:${minutes}:${seconds}`;
+            
+            // Update date
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            currentDateTimeElement.textContent = now.toLocaleDateString('id-ID', options);
+        }
+
+        // Setup geolocation tracking
+        function setupGeolocation() {
+            if (navigator.geolocation) {
+                // Get initial position
+                navigator.geolocation.getCurrentPosition(
+                    updatePosition,
+                    handleGeolocationError,
+                    { 
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+                
+                // Watch position changes
+                positionWatchId = navigator.geolocation.watchPosition(
+                    updatePosition,
+                    handleGeolocationError,
+                    { 
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                locationText.textContent = 'Geolokasi tidak didukung oleh browser ini';
+            }
+        }
+
+        // Update position info
+        function updatePosition(position) {
+            currentPosition = position;
+            const lat = position.coords.latitude.toFixed(6);
+            const lng = position.coords.longitude.toFixed(6);
+            locationText.textContent = `Lat: ${lat}, Long: ${lng}`;
+            
+            // Update Map Container with basic text info
+            const mapContainer = document.getElementById('map-container');
+            mapContainer.innerHTML = `
+                <div class="text-center p-2">
+                    <p class="font-semibold text-blue-600">Lokasi Anda:</p>
+                    <p class="text-gray-700">Latitude: ${lat}</p>
+                    <p class="text-gray-700">Longitude: ${lng}</p>
+                    <p class="text-sm text-gray-500 mt-2">Akurasi: ±${Math.round(position.coords.accuracy)} meter</p>
+                </div>
+            `;
+        }
+
+        // Handle geolocation errors
+        function handleGeolocationError(error) {
+            console.error('Geolocation error:', error);
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    locationText.textContent = 'Akses lokasi ditolak oleh pengguna';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    locationText.textContent = 'Informasi lokasi tidak tersedia';
+                    break;
+                case error.TIMEOUT:
+                    locationText.textContent = 'Waktu permintaan lokasi habis';
+                    break;
+                default:
+                    locationText.textContent = 'Terjadi kesalahan pada geolokasi';
+                    break;
+            }
+        }
+
+        // Refresh geolocation function
+        function refreshGeolocation() {
+            if (navigator.geolocation) {
+                locationText.textContent = 'Memperbarui lokasi...';
+                
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        updatePosition(position);
+                        showNotification('success', 'Lokasi Diperbarui', 'Koordinat GPS berhasil diperbarui');
+                    },
+                    function(error) {
+                        handleGeolocationError(error);
+                        showNotification('error', 'Error GPS', 'Gagal memperbarui lokasi');
+                    },
+                    { 
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                showNotification('error', 'Error', 'Geolokasi tidak didukung browser ini');
+            }
+        }
+
+// Handle absen masuk
+async function handleAbsenMasuk() {
+    if (!currentPosition) {
+        showNotification('error', 'Error', 'Lokasi tidak ditemukan. Mohon aktifkan GPS.');
+        return;
+    }
+    
+    showModal('Konfirmasi Absen Masuk', 'Apakah Anda yakin ingin melakukan absen masuk?', async () => {
+        try {
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+            
+            // Log debugging info
+            console.log('Current user:', currentUser);
+            
+            // First, check if user exists
+            const { data: existingUser, error: checkError } = await supabaseClient
+                .from('users')
+                .select('id, role')
+                .eq('id', currentUser.id)
+                .maybeSingle();
+                
+            if (checkError) {
+                console.error('Error checking user existence:', checkError);
+                throw checkError;
+            }
+            
+            // If user doesn't exist, create it with required fields
+            if (!existingUser) {
+                console.log('User not found in users table, creating user record with required fields');
+                
+                const { data: newUser, error: createError } = await supabaseClient
+                    .from('users')
+                    .insert({
+                        id: currentUser.id,
+                        role: 'petugas' // Required field as per the error message
+                    })
+                    .select();
+                    
+                if (createError) {
+                    console.error('Error creating user record:', createError);
+                    throw createError;
+                }
+                
+                console.log('Created new user record:', newUser);
+            } else {
+                console.log('User found in database:', existingUser);
+            }
+            
+            // Now create the absensi record
+            const { data, error } = await supabaseClient
+                .from('absensi')
+                .insert({
+                    user_id: currentUser.id,
+                    tanggal: today,
+                    jam_masuk: now.toISOString(),
+                    lokasi_masuk: `${currentPosition.coords.latitude},${currentPosition.coords.longitude}`,
+                    created_at: now.toISOString()
+                })
+                .select();
+            
+            if (error) {
+                console.error('Absensi insert error details:', error);
+                throw error;
+            }
+            
+            absensiMasuk = data[0];
+            console.log('Absen masuk successful:', absensiMasuk);
+            
+            // Update UI
+            statusText.textContent = 'Sedang Bertugas';
+            statusText.className = 'font-semibold text-blue-500';
+            absenMasukBtn.disabled = true;
+            absenKeluarBtn.disabled = false;
+            
+            // Start timer
+            startTimer(absensiMasuk.jam_masuk);
+            
+            showNotification('success', 'Berhasil', 'Absen masuk berhasil dicatat');
+        } catch (error) {
+            console.error('Error absen masuk (full details):', error);
+            
+            // More detailed error information
+            if (error.code === '23503') {
+                showNotification('error', 'Error Database', 'User ID tidak ditemukan di database. Silakan logout dan login kembali.');
+            } else if (error.code === 'PGRST204') {
+                showNotification('error', 'Error Database', 'Struktur database tidak sesuai. Hubungi administrator.');
+            } else if (error.code === '23502') {
+                showNotification('error', 'Error Database', 'Data yang dibutuhkan tidak lengkap. Hubungi administrator.');
+                console.error('Column with NOT NULL constraint missing:', error.details);
+            } else {
+                showNotification('error', 'Error', `Gagal melakukan absen masuk: ${error.message || 'Unknown error'}`);
+            }
+        }
+    });
+}
+
+        // Handle absen keluar
+        async function handleAbsenKeluar() {
+            if (!currentPosition) {
+                showNotification('error', 'Error', 'Lokasi tidak ditemukan. Mohon aktifkan GPS.');
+                return;
+            }
+            
+            // Check if 8 hours have passed
+            if (absensiMasuk) {
+                const masukTime = new Date(absensiMasuk.jam_masuk);
+                const now = new Date();
+                const diffMs = now - masukTime;
+                const diffHours = diffMs / (1000 * 60 * 60);
+                
+                if (diffHours < 8) {
+                    showNotification('error', 'Belum Bisa Absen Keluar', 'Minimal 8 jam setelah absen masuk');
+                    return;
+                }
+            }
+            
+            showModal('Konfirmasi Absen Keluar', 'Apakah Anda yakin ingin melakukan absen keluar?', async () => {
+                try {
+                    const now = new Date();
+                    
+                    // Update absensi
+                    const { error } = await supabaseClient
+                        .from('absensi')
+                        .update({
+                            jam_keluar: now.toISOString(),
+                            lokasi_keluar: `${currentPosition.coords.latitude},${currentPosition.coords.longitude}`,
+                            updated_at: now.toISOString()
+                        })
+                        .eq('id', absensiMasuk.id);
+                    
+                    if (error) throw error;
+                    
+                    // Update UI
+                    statusText.textContent = 'Selesai';
+                    statusText.className = 'font-semibold text-green-500';
+                    absenKeluarBtn.disabled = true;
+                    
+                    // Stop timer
+                    if (timerInterval) {
+                        clearInterval(timerInterval);
+                        timerDisplay.classList.add('hidden');
+                    }
+                    
+                    showNotification('success', 'Berhasil', 'Absen keluar berhasil dicatat');
+                } catch (error) {
+                    console.error('Error absen keluar:', error);
+                    showNotification('error', 'Error', 'Gagal melakukan absen keluar');
+                }
+            });
+        }
+
+        // Logout function
+        async function handleLogout() {
+            showModal('Konfirmasi Logout', 'Apakah Anda yakin ingin logout dari sistem?', async () => {
+                try {
+                    const { error } = await supabaseClient.auth.signOut();
+                    if (error) throw error;
+                    
+                    // Clear watch position
+                    if (positionWatchId) {
+                        navigator.geolocation.clearWatch(positionWatchId);
+                    }
+                    
+                    // Redirect to login
+                    window.location.href = '../index.html';
+                } catch (error) {
+                    console.error('Error during logout:', error);
+                    showNotification('error', 'Error', 'Gagal logout. Coba lagi.');
+                }
+            });
+        }
+
+        // Show modal function
+        function showModal(title, message, confirmCallback) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modalCallback = confirmCallback;
+            
+            confirmationModal.classList.remove('hidden');
+            
+            // Setup modal confirm button
+            modalConfirm.onclick = function() {
+                hideModal();
+                if (modalCallback) modalCallback();
+            };
+        }
+
+        // Hide modal function
+        function hideModal() {
+            confirmationModal.classList.add('hidden');
+        }
+
+        // Show notification
+        function showNotification(type, message, detail) {
+            // Set icon
+            if (type === 'success') {
+                notificationIcon.innerHTML = '<i class="fas fa-check-circle text-green-500 text-xl"></i>';
+                notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-green-100';
+            } else if (type === 'error') {
+                notificationIcon.innerHTML = '<i class="fas fa-times-circle text-red-500 text-xl"></i>';
+                notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-red-100';
+            } else if (type === 'warning') {
+                notificationIcon.innerHTML = '<i class="fas fa-exclamation-circle text-yellow-500 text-xl"></i>';
+                notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-yellow-100';
+            } else {
+                notificationIcon.innerHTML = '<i class="fas fa-info-circle text-blue-500 text-xl"></i>';
+                notificationIcon.className = 'flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center mr-3 bg-blue-100';
+            }
+            
+            // Set message
+            notificationMessage.textContent = message;
+            notificationDetail.textContent = detail;
+            
+            // Show notification
+            notificationToast.classList.remove('invisible', 'opacity-0', 'translate-y-20');
+            
+            // Hide after 5 seconds
+            setTimeout(hideNotification, 5000);
+        }
+
+        // Hide notification
+        function hideNotification() {
+            notificationToast.classList.add('invisible', 'opacity-0', 'translate-y-20');
+        }
+        
+    </script>
+</body>
+</html>
