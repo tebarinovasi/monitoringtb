@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin - Monitoring Kebersihan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js/dist/umd/supabase.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css">
+    <style>
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .map-container {
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="bg-blue-800 text-white w-64 flex flex-col fixed h-full">
+        <div class="p-4 border-b border-blue-700">
+            <h2 class="text-xl font-bold">Monitoring Kebersihan</h2>
+            <p class="text-sm text-blue-200">Panel Admin</p>
+        </div>
+        <nav class="flex-grow">
+            <ul class="p-2">
+                <li class="mb-1">
+                    <a href="#" class="block p-3 rounded bg-blue-900 hover:bg-blue-700">
+                        <i class="fas fa-tachometer-alt mr-2"></i> Dashboard
+                    </a>
+                </li>
+                <li class="mb-1">
+                    <a href="#" class="block p-3 rounded hover:bg-blue-700">
+                        <i class="fas fa-users mr-2"></i> Kelola Petugas
+                    </a>
+                </li>
+                <li class="mb-1">
+                    <a href="#" class="block p-3 rounded hover:bg-blue-700">
+                        <i class="fas fa-map-marker-alt mr-2"></i> Peta Lokasi
+                    </a>
+                </li>
+                <li class="mb-1">
+                    <a href="#" class="block p-3 rounded hover:bg-blue-700">
+                        <i class="fas fa-file-alt mr-2"></i> Laporan
+                    </a>
+                </li>
+                <li class="mb-1">
+                    <a href="#" class="block p-3 rounded hover:bg-blue-700">
+                        <i class="fas fa-cog mr-2"></i> Pengaturan
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        <div class="p-4 border-t border-blue-700">
+            <button id="logout-button" class="w-full p-2 bg-red-600 rounded text-white hover:bg-red-700">
+                <i class="fas fa-sign-out-alt mr-2"></i> Keluar
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 flex-grow p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold">Dashboard Admin</h1>
+            <div class="flex items-center">
+                <span class="mr-2"><i class="fas fa-user-circle text-xl text-blue-800"></i></span>
+                <span id="admin-name">Admin</span>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center">
+                    <div class="rounded-full bg-blue-100 p-3 mr-4">
+                        <i class="fas fa-users text-blue-800"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">Total Petugas</h3>
+                        <p id="total-petugas" class="text-2xl font-bold">0</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center">
+                    <div class="rounded-full bg-green-100 p-3 mr-4">
+                        <i class="fas fa-check-circle text-green-800"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">Hadir Hari Ini</h3>
+                        <p id="total-hadir" class="text-2xl font-bold">0</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center">
+                    <div class="rounded-full bg-red-100 p-3 mr-4">
+                        <i class="fas fa-times-circle text-red-800"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">Tidak Hadir</h3>
+                        <p id="total-tidak-hadir" class="text-2xl font-bold">0</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center">
+                    <div class="rounded-full bg-yellow-100 p-3 mr-4">
+                        <i class="fas fa-camera text-yellow-800"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-700">Foto Hari Ini</h3>
+                        <p id="total-foto" class="text-2xl font-bold">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Peta Lokasi Petugas -->
+            <div class="lg:col-span-2 bg-white rounded-lg shadow p-4">
+                <h2 class="text-xl font-semibold mb-4">Lokasi Petugas Realtime</h2>
+                <div id="map" class="map-container rounded"></div>
+            </div>
+            
+            <!-- Absensi Chart -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="text-xl font-semibold mb-4">Statistik Absensi</h2>
+                <canvas id="absensi-chart" height="250"></canvas>
+            </div>
+        </div>
+
+        <!-- Daftar Petugas dan Status -->
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">Daftar Petugas</h2>
+                <div class="flex">
+                    <div class="relative mr-2">
+                        <input type="text" id="search-petugas" placeholder="Cari petugas..." class="p-2 pl-8 border rounded">
+                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                    </div>
+                    <select id="filter-status" class="p-2 border rounded">
+                        <option value="all">Semua Status</option>
+                        <option value="hadir">Hadir</option>
+                        <option value="tidak-hadir">Tidak Hadir</option>
+                    </select>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-2 text-left">Nama Petugas</th>
+                            <th class="px-4 py-2 text-left">Status</th>
+                            <th class="px-4 py-2 text-left">Absen Masuk</th>
+                            <th class="px-4 py-2 text-left">Absen Keluar</th>
+                            <th class="px-4 py-2 text-left">Lokasi Terakhir</th>
+                            <th class="px-4 py-2 text-left">Foto Kerja</th>
+                        </tr>
+                    </thead>
+                    <tbody id="petugas-table-body">
+                        <!-- Data will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+                <div>
+                    <span id="showing-entries">Menampilkan 0 dari 0 petugas</span>
+                </div>
+                <div class="flex space-x-2">
+                    <button id="prev-page" class="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <button id="next-page" class="px-3 py-1 bg-gray-200 rounded disabled:opacity-50">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aktivitas Terbaru -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="text-xl font-semibold mb-4">Aktivitas Terbaru</h2>
+                <ul id="aktivitas-list" class="space-y-3 max-h-80 overflow-y-auto scrollbar-thin">
+                    <!-- Data will be populated by JavaScript -->
+                </ul>
+            </div>
+            
+            <!-- Foto Kerja Terbaru -->
+            <div class="bg-white rounded-lg shadow p-4">
+                <h2 class="text-xl font-semibold mb-4">Foto Kerja Terbaru</h2>
+                <div id="foto-container" class="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-80 overflow-y-auto scrollbar-thin">
+                    <!-- Data will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal untuk melihat foto kerja -->
+    <div id="foto-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg max-w-2xl w-full">
+            <div class="p-4 border-b flex justify-between">
+                <h3 class="text-xl font-semibold" id="modal-title">Foto Kerja</h3>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="p-4">
+                <img id="modal-image" src="" alt="Foto Kerja" class="w-full">
+                <div class="mt-4">
+                    <p id="modal-petugas" class="font-semibold"></p>
+                    <p id="modal-waktu" class="text-gray-600"></p>
+                    <p id="modal-lokasi" class="text-gray-600"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Inisialisasi Supabase
+        const supabaseUrl = 'https://mztxspcmmcvevngdgxpr.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16dHhzcGNtbWN2ZXZuZ2RneHByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5ODQyNzUsImV4cCI6MjA2MTU2MDI3NX0.ej9VAhdlnm41Vw4Ga-XYz0StfioQwY4Nfj9z1D0JO_o';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Variables untuk pagination
+        let currentPage = 1;
+        const itemsPerPage = 10;
+        let petugasData = [];
+        let filteredData = [];
+        let markerLayer;
+        let petugasMarkers = {};
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Cek status login
+            checkLoginStatus();
+            
+            // Initialize map
+            const map = L.map('map').setView([-6.2088, 106.8456], 11); // Jakarta center
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            markerLayer = L.layerGroup().addTo(map);
+            
+            // Mengambil data petugas
+            await fetchPetugasData();
+            
+            // Inisialisasi chart absensi
+            initializeAbsensiChart();
+            
+            // Setup event listeners
+            setupEventListeners();
+            
+            // Polling untuk update lokasi setiap 30 detik
+            setInterval(updatePetugasLocations, 30000);
+            
+            // Populate aktivitas terbaru
+            await fetchLatestActivities();
+            
+            // Populate foto kerja terbaru
+            await fetchLatestPhotos();
+        });
+
+        async function checkLoginStatus() {
+            const { data: { session }, error } = await supabaseClient.auth.getSession();
+            
+            if (error) {
+                console.error('Error checking auth status:', error);
+                return;
+            }
+            
+            if (!session) {
+                window.location.href = '../index.html';
+                return;
+            }
+            
+            // Verify if user is admin
+            try {
+                const { data: userData, error: userError } = await supabaseClient
+                    .from('users')
+                    .select('role, name')
+                    .eq('user_id', session.user.id)
+                    .single();
+                
+                if (userError || !userData || userData.role !== 'admin') {
+                    alert('Anda tidak memiliki akses ke halaman ini');
+                    await supabaseClient.auth.signOut();
+                    window.location.href = '../index.html';
+                    return;
+                }
+                
+                // Set admin name
+                document.getElementById('admin-name').textContent = userData.name || session.user.email;
+                
+            } catch (verifyError) {
+                console.error('Error verifying admin status:', verifyError);
+                window.location.href = '../index.html';
+            }
+        }
+
+        async function fetchPetugasData() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('users')
+                    .select('*')
+                    .eq('role', 'petugas');
+                
+                if (error) throw error;
+                
+                petugasData = data || [];
+                filteredData = [...petugasData];
+                
+                // Update counters
+                document.getElementById('total-petugas').textContent = petugasData.length;
+                
+                // Fetch attendance data
+                await fetchAbsensiData();
+                
+                // Render table with first page
+                renderPetugasTable();
+                
+            } catch (err) {
+                console.error('Error fetching petugas data:', err);
+            }
+        }
+
+        async function fetchAbsensiData() {
+            try {
+                // Get today's date in YYYY-MM-DD format
+                const today = new Date().toISOString().split('T')[0];
+                
+                const { data, error } = await supabaseClient
+                    .from('absensi')
+                    .select('*')
+                    .gte('tanggal', today);
+                
+                if (error) throw error;
+                
+                const absensiData = data || [];
+                const hadir = new Set();
+                
+                // Process attendance data
+                for (const absen of absensiData) {
+                    const petugasIndex = petugasData.findIndex(p => p.user_id === absen.user_id);
+                    
+                    if (petugasIndex !== -1) {
+                        petugasData[petugasIndex].absensi = petugasData[petugasIndex].absensi || {};
+                        
+                        if (absen.jenis === 'masuk') {
+                            petugasData[petugasIndex].absensi.masuk = absen.waktu;
+                            petugasData[petugasIndex].absensi.status = 'hadir';
+                            hadir.add(absen.user_id);
+                        } else if (absen.jenis === 'keluar') {
+                            petugasData[petugasIndex].absensi.keluar = absen.waktu;
+                        }
+                        
+                        // Set last known location
+                        if (absen.lokasi) {
+                            petugasData[petugasIndex].last_location = absen.lokasi;
+                        }
+                    }
+                }
+                
+                // Mark absent petugas
+                for (const petugas of petugasData) {
+                    if (!petugas.absensi || !petugas.absensi.status) {
+                        petugas.absensi = petugas.absensi || {};
+                        petugas.absensi.status = 'tidak-hadir';
+                    }
+                }
+                
+                // Update counters
+                document.getElementById('total-hadir').textContent = hadir.size;
+                document.getElementById('total-tidak-hadir').textContent = petugasData.length - hadir.size;
+                
+                // Update map with locations
+                updateMapMarkers();
+                
+            } catch (err) {
+                console.error('Error fetching absensi data:', err);
+            }
+        }
+
+        function updateMapMarkers() {
+            // Clear existing markers
+            markerLayer.clearLayers();
+            petugasMarkers = {};
+            
+            for (const petugas of petugasData) {
+                if (petugas.last_location) {
+                    try {
+                        const location = typeof petugas.last_location === 'string' 
+                            ? JSON.parse(petugas.last_location) 
+                            : petugas.last_location;
+                        
+                        if (location.latitude && location.longitude) {
+                            const statusColor = petugas.absensi && petugas.absensi.status === 'hadir' ? 'green' : 'red';
+                            
+                            const markerIcon = L.divIcon({
+                                html: `<i class="fas fa-map-marker-alt text-${statusColor}-600 text-2xl"></i>`,
+                                className: 'custom-marker',
+                                iconSize: [24, 24],
+                                iconAnchor: [12, 24],
+                                popupAnchor: [0, -24]
+                            });
+        }
+        }
+        
+        function filterPetugasData(searchTerm, statusFilter) {
+            filteredData = petugasData.filter(petugas => {
+                const nameMatch = petugas.name && petugas.name.toLowerCase().includes(searchTerm);
+                const emailMatch = petugas.email && petugas.email.toLowerCase().includes(searchTerm);
+                
+                // Filter by status
+                let statusMatch = true;
+                if (statusFilter !== 'all') {
+                    statusMatch = petugas.absensi && petugas.absensi.status === statusFilter;
+                }
+                
+                return (nameMatch || emailMatch) && statusMatch;
+            });
+            
+            currentPage = 1; // Reset to first page
+            renderPetugasTable();
+        }
+        
+        // Helper functions
+        function formatDateTime(dateTimeStr) {
+            if (!dateTimeStr) return '-';
+            
+            const date = new Date(dateTimeStr);
+            return date.toLocaleString('id-ID', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        
+        function formatDate(dateTimeStr) {
+            if (!dateTimeStr) return '-';
+            
+            const date = new Date(dateTimeStr);
+            return date.toLocaleDateString('id-ID', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+        
+        function formatTime(dateTimeStr) {
+            if (!dateTimeStr) return '-';
+            
+            const date = new Date(dateTimeStr);
+            return date.toLocaleTimeString('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+                            
+                            const marker = L.marker([location.latitude, location.longitude], { icon: markerIcon })
+                                .addTo(markerLayer)
+                                .bindPopup(`
+                                    <b>${petugas.name || 'Petugas'}</b><br>
+                                    Status: ${petugas.absensi && petugas.absensi.status === 'hadir' ? 'Hadir' : 'Tidak Hadir'}<br>
+                                    ${petugas.absensi && petugas.absensi.masuk ? 'Absen masuk: ' + formatDateTime(petugas.absensi.masuk) : ''}
+                                `);
+                            
+                            petugasMarkers[petugas.user_id] = marker;
+                        }
+                    } catch (err) {
+                        console.error('Error parsing location data:', err);
+                    }
+                }
+            }
+        }
+
+        async function updatePetugasLocations() {
+            try {
+                // Get latest location data
+                const { data, error } = await supabaseClient
+                    .from('lokasi')
+                    .select('*')
+                    .order('waktu', { ascending: false });
+                
+                if (error) throw error;
+                
+                if (!data || data.length === 0) return;
+                
+                // Process latest locations
+                const latestLocations = {};
+                
+                for (const loc of data) {
+                    if (!latestLocations[loc.user_id]) {
+                        latestLocations[loc.user_id] = loc;
+                    }
+                }
+                
+                // Update petugas data with latest locations
+                for (const userId in latestLocations) {
+                    const petugasIndex = petugasData.findIndex(p => p.user_id === userId);
+                    
+                    if (petugasIndex !== -1) {
+                        petugasData[petugasIndex].last_location = latestLocations[userId].koordinat;
+                    }
+                }
+                
+                // Update map markers
+                updateMapMarkers();
+                
+            } catch (err) {
+                console.error('Error updating petugas locations:', err);
+            }
+        }
+
+        function initializeAbsensiChart() {
+            // Count status
+            const hadir = petugasData.filter(p => p.absensi && p.absensi.status === 'hadir').length;
+            const tidakHadir = petugasData.length - hadir;
+            
+            const ctx = document.getElementById('absensi-chart').getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Hadir', 'Tidak Hadir'],
+                    datasets: [{
+                        label: 'Absensi Hari Ini',
+                        data: [hadir, tidakHadir],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.8)',
+                            'rgba(255, 99, 132, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(255, 99, 132, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        async function fetchLatestActivities() {
+            try {
+                // Fetch latest absensi activities
+                const { data, error } = await supabaseClient
+                    .from('absensi')
+                    .select('*, users!inner(name)')
+                    .order('waktu', { ascending: false })
+                    .limit(10);
+                
+                if (error) throw error;
+                
+                const aktivitasList = document.getElementById('aktivitas-list');
+                aktivitasList.innerHTML = '';
+                
+                if (!data || data.length === 0) {
+                    aktivitasList.innerHTML = '<li class="text-gray-500 p-3">Belum ada aktivitas</li>';
+                    return;
+                }
+                
+                for (const aktivitas of data) {
+                    const li = document.createElement('li');
+                    li.className = 'p-3 border-l-4 border-blue-500 bg-blue-50 rounded';
+                    
+                    const jenis = aktivitas.jenis === 'masuk' ? 'Absen Masuk' : 'Absen Keluar';
+                    const icon = aktivitas.jenis === 'masuk' ? 'sign-in-alt' : 'sign-out-alt';
+                    const color = aktivitas.jenis === 'masuk' ? 'green' : 'blue';
+                    
+                    li.innerHTML = `
+                        <div class="flex">
+                            <div class="rounded-full bg-${color}-100 p-2 mr-3">
+                                <i class="fas fa-${icon} text-${color}-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-semibold">${aktivitas.users.name}</p>
+                                <p>${jenis} - ${formatDateTime(aktivitas.waktu)}</p>
+                            </div>
+                        </div>
+                    `;
+                
+                // Tambahkan event listener untuk preview foto
+                const fotoPreview = row.querySelector('.foto-preview');
+                if (fotoPreview) {
+                    fotoPreview.addEventListener('click', async () => {
+                        try {
+                            // Fetch foto details
+                            const { data, error } = await supabaseClient
+                                .from('foto_kerja')
+                                .select('*, users!inner(name)')
+                                .eq('user_id', petugas.user_id)
+                                .order('waktu', { ascending: false })
+                                .limit(1)
+                                .single();
+                            
+                            if (error) throw error;
+                            
+                            if (data) {
+                                const photoUrl = `${supabaseUrl}/storage/v1/object/public/foto_kerja/${data.file_path}`;
+                                showPhotoModal(data, photoUrl);
+                            }
+                        } catch (err) {
+                            console.error('Error fetching photo details:', err);
+                        }
+                    });
+                }
+                    
+                    aktivitasList.appendChild(li);
+                }
+                
+            } catch (err) {
+                console.error('Error fetching latest activities:', err);
+            }
+        }
+
+        async function fetchLatestPhotos() {
+            try {
+                // Fetch latest photos
+                const { data, error } = await supabaseClient
+                    .from('foto_kerja')
+                    .select('*, users!inner(name)')
+                    .order('waktu', { ascending: false })
+                    .limit(6);
+                
+                if (error) throw error;
+                
+                const fotoContainer = document.getElementById('foto-container');
+                fotoContainer.innerHTML = '';
+                
+                if (!data || data.length === 0) {
+                    fotoContainer.innerHTML = '<div class="col-span-3 text-gray-500 p-3">Belum ada foto</div>';
+                    return;
+                }
+                
+                // Update counter
+                document.getElementById('total-foto').textContent = data.length;
+                
+                for (const foto of data) {
+                    const div = document.createElement('div');
+                    div.className = 'relative group cursor-pointer';
+                    
+                    // Construct the storage URL
+                    const photoUrl = `${supabaseUrl}/storage/v1/object/public/foto_kerja/${foto.file_path}`;
+                    
+                    div.innerHTML = `
+                        <img src="${photoUrl}" alt="Foto Kerja" class="rounded h-32 w-full object-cover">
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center">
+                            <div class="text-white opacity-0 group-hover:opacity-100 transition-all text-center">
+                                <p class="text-sm font-semibold truncate">${foto.users.name}</p>
+                                <p class="text-xs">${formatDate(foto.waktu)}</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    div.addEventListener('click', () => {
+                        showPhotoModal(foto, photoUrl);
+                    });
+                    
+                    fotoContainer.appendChild(div);
+                }
+                
+            } catch (err) {
+                console.error('Error fetching latest photos:', err);
+            }
+        }
+
+        function showPhotoModal(foto, photoUrl) {
+            const modal = document.getElementById('foto-modal');
+            const modalImage = document.getElementById('modal-image');
+            const modalTitle = document.getElementById('modal-title');
+            const modalPetugas = document.getElementById('modal-petugas');
+            const modalWaktu = document.getElementById('modal-waktu');
+            const modalLokasi = document.getElementById('modal-lokasi');
+            
+            modalImage.src = photoUrl;
+            modalTitle.textContent = 'Foto Kerja';
+            modalPetugas.textContent = `Petugas: ${foto.users.name}`;
+            modalWaktu.textContent = `Waktu: ${formatDateTime(foto.waktu)}`;
+            
+            let lokasiText = 'Lokasi: Tidak tersedia';
+            if (foto.lokasi) {
+                try {
+                    const lokasiObj = typeof foto.lokasi === 'string' ? JSON.parse(foto.lokasi) : foto.lokasi;
+                    if (lokasiObj.latitude && lokasiObj.longitude) {
+                        lokasiText = `Lokasi: ${lokasiObj.latitude.toFixed(6)}, ${lokasiObj.longitude.toFixed(6)}`;
+                    }
+                } catch (e) {
+                    console.error('Error parsing location:', e);
+                }
+            }
+            modalLokasi.textContent = lokasiText;
+            
+            modal.classList.remove('hidden');
+        }
+
+        function renderPetugasTable() {
+            const tableBody = document.getElementById('petugas-table-body');
+            tableBody.innerHTML = '';
+            
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const displayedData = filteredData.slice(start, end);
+            
+            if (displayedData.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-4 text-center text-gray-500">Tidak ada data petugas</td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            for (const petugas of displayedData) {
+                const row = document.createElement('tr');
+                row.className = 'border-b hover:bg-gray-50';
+                
+                const statusClass = petugas.absensi && petugas.absensi.status === 'hadir' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+                
+                // Konstruksi URL foto kerja jika ada
+                let fotoKerjaHtml = '<span class="text-gray-400">Belum ada foto</span>';
+                if (petugas.foto_kerja_terbaru) {
+                    const photoUrl = `${supabaseUrl}/storage/v1/object/public/foto_kerja/${petugas.foto_kerja_terbaru}`;
+                    fotoKerjaHtml = `
+                        <div class="cursor-pointer foto-preview" data-petugas="${petugas.user_id}">
+                            <img src="${photoUrl}" alt="Foto Kerja" class="h-12 w-12 object-cover rounded">
+                        </div>
+                    `;
+                }
+                
+                // Format lokasi jika ada
+                let lokasiText = 'Belum ada data';
+                if (petugas.last_location) {
+                    try {
+                        const lokasiObj = typeof petugas.last_location === 'string' 
+                            ? JSON.parse(petugas.last_location) 
+                            : petugas.last_location;
+                        
+                        if (lokasiObj.latitude && lokasiObj.longitude) {
+                            lokasiText = `${lokasiObj.latitude.toFixed(6)}, ${lokasiObj.longitude.toFixed(6)}`;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing location:', e);
+                    }
+                }
+                
+                row.innerHTML = `
+                    <td class="px-4 py-3">
+                        <div class="flex items-center">
+                            <div class="w-8 h-8 rounded-full bg-blue-200 flex items-center justify-center mr-3">
+                                <span class="font-bold text-blue-700">${(petugas.name || 'User').charAt(0).toUpperCase()}</span>
+                            </div>
+                            <div>
+                                <p class="font-medium">${petugas.name || 'Nama tidak tersedia'}</p>
+                                <p class="text-xs text-gray-500">${petugas.email || ''}</p>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${statusClass}">
+                            ${petugas.absensi && petugas.absensi.status === 'hadir' ? 'Hadir' : 'Tidak Hadir'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        ${petugas.absensi && petugas.absensi.masuk ? formatTime(petugas.absensi.masuk) : '-'}
+                    </td>
+                    <td class="px-4 py-3">
+                        ${petugas.absensi && petugas.absensi.keluar ? formatTime(petugas.absensi.keluar) : '-'}
+                    </td>
+                    <td class="px-4 py-3">
+                        <span title="${lokasiText}">${lokasiText.length > 15 ? lokasiText.substring(0, 15) + '...' : lokasiText}</span>
+                    </td>
+                    <td class="px-4 py-3">
+                        ${fotoKerjaHtml}
+                    </td>
+                `;
