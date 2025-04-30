@@ -1,0 +1,361 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cleaning Staff Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100">
+<div id="toast" class="fixed top-4 right-4 z-50 hidden"></div>
+
+<!-- Login Page -->
+<div id="loginPage" class="min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-96 transition-all duration-300 hover:shadow-lg">
+        <h1 class="text-2xl font-bold mb-6 text-center text-gray-800">Login Petugas</h1>
+        <div class="flex gap-4 mb-6">
+            <button onclick="showLoginForm('admin')" class="flex-1 bg-blue-500 text-white p-2 rounded hover:bg-blue-600 transition-colors">Admin</button>
+            <button onclick="showLoginForm('petugas')" class="flex-1 bg-green-500 text-white p-2 rounded hover:bg-green-600 transition-colors">Petugas</button>
+        </div>
+        <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+            <input type="hidden" id="userType">
+            <div>
+                <label class="block mb-2 text-gray-700">Email</label>
+                <input type="email" id="email" required class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+            <div>
+                <label class="block mb-2 text-gray-700">Password</label>
+                <input type="password" id="password" required class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 transition-all">
+            </div>
+            <button type="submit" class="w-full bg-indigo-500 text-white p-2 rounded hover:bg-indigo-600 transition-colors flex justify-center items-center">
+                <span id="loginText">Masuk</span>
+                <div id="loginSpinner" class="hidden animate-spin ml-2">🔄</div>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Petugas Dashboard -->
+<div id="petugasDashboard" class="hidden">
+    <nav class="bg-white shadow-sm p-4 flex justify-between items-center">
+        <h2 class="text-xl font-bold">Dashboard Petugas</h2>
+        <button onclick="handleLogout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors">Logout</button>
+    </nav>
+    <div class="max-w-md mx-auto p-6">
+        <div class="bg-white rounded-lg shadow-md p-6 space-y-6 animate-fade-in">
+            <div class="text-center">
+                <p class="text-lg" id="userGreeting"></p>
+            </div>
+            <div class="space-y-4">
+                <button onclick="absen('masuk')" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center">
+                    <span id="masukText">Absen Masuk</span>
+                    <div id="masukSpinner" class="hidden animate-spin ml-2">🔄</div>
+                </button>
+                <button onclick="absen('pulang')" class="w-full bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center">
+                    <span id="pulangText">Absen Pulang</span>
+                    <div id="pulangSpinner" class="hidden animate-spin ml-2">🔄</div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Admin Dashboard -->
+<div id="adminDashboard" class="hidden">
+    <nav class="bg-white shadow-sm p-4 flex justify-between items-center">
+        <h2 class="text-xl font-bold">Admin Dashboard</h2>
+        <button onclick="handleLogout()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors">Logout</button>
+    </nav>
+    <div class="max-w-7xl mx-auto p-6 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-bold mb-4">Statistik Absensi</h3>
+                <canvas id="attendanceChart"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-bold mb-4">Lokasi Real-time</h3>
+                <div id="map" class="h-96 rounded-lg"></div>
+            </div>
+        </div>
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h3 class="text-lg font-bold mb-4">Daftar Absensi</h3>
+            <div id="staffList" class="grid gap-4"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+        // Inisialisasi Supabase
+        const supabaseUrl = 'https://oqbddldxtratqxpttppq.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9xYmRkbGR4dHJhdHF4cHR0cHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU5NzE4NzUsImV4cCI6MjA2MTU0Nzg3NX0.dengGPCPfJPlUuqr9bza1EFcxGLJATfl0IpyFtAvDxs';
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+        
+        let map, markers = [];
+        let attendanceChart;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Toast Notification
+            function showToast(message, type = 'success') {
+                const toast = document.getElementById('toast');
+                toast.innerHTML = `
+                    <div class="flex items-center p-4 rounded-lg shadow-lg text-white ${type === 'error' ? 'bg-red-500' : 'bg-green-500'}">
+                        <span>${message}</span>
+                    </div>
+                `;
+                toast.classList.remove('hidden');
+                setTimeout(() => toast.classList.add('hidden'), 3000);
+            }
+
+            // Login Functions
+            window.showLoginForm = (type) => {
+                document.getElementById('userType').value = type;
+            }
+
+            window.handleLogin = async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const loginBtn = document.getElementById('loginText');
+                const spinner = document.getElementById('loginSpinner');
+
+                loginBtn.disabled = true;
+                spinner.classList.remove('hidden');
+                loginBtn.classList.add('opacity-50');
+
+                try {
+                    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('role')
+                        .eq('id', data.user.id)
+                        .single();
+
+                    if (!profile) throw new Error('Profil pengguna tidak ditemukan');
+                    
+                    if (profile.role === 'admin') showAdminDashboard();
+                    else if (profile.role === 'petugas') showPetugasDashboard();
+                    else throw new Error('Role tidak valid');
+
+                    showToast('Login berhasil!');
+
+                } catch (error) {
+                    showToast(error.message, 'error');
+                } finally {
+                    loginBtn.disabled = false;
+                    spinner.classList.add('hidden');
+                    loginBtn.classList.remove('opacity-50');
+                }
+            }
+
+            function updateMap(locations) {
+    markers.forEach(marker => map.removeLayer(marker));
+    markers = [];
+
+    locations.forEach(loc => {
+        if (!loc.location) return;
+
+        const [lng, lat] = loc.location
+            .replace('POINT(', '')
+            .replace(')', '')
+            .split(' ')
+            .map(Number);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup(`${loc.profiles?.name ?? 'Petugas'} (${loc.type})`)
+                .openPopup();
+            markers.push(marker);
+        }
+    });
+
+    // Auto-focus ke pin pertama jika ada
+    if (locations.length > 0 && locations[0].location) {
+        const [lng, lat] = locations[0].location.replace('POINT(', '').replace(')', '').split(' ').map(Number);
+        if (!isNaN(lat) && !isNaN(lng)) map.setView([lat, lng], 15);
+    }
+}
+
+
+async function loadStaffLocations() {
+    const { data, error } = await supabase
+        .from('absensi')
+        .select(`
+            type,
+            location,
+            created_at,
+            profiles ( name )
+        `)
+        .order('created_at', { ascending: false });
+
+    console.log('Absensi data:', data, 'Error:', error); // debug log
+
+    if (!error && data) {
+        updateMap(data);
+        const staffList = document.getElementById('staffList');
+        staffList.innerHTML = data.map(entry => `
+            <div class="bg-white p-4 rounded-lg shadow animate-fade-in">
+                <h3 class="font-bold">${entry.profiles?.name ?? 'Tidak diketahui'}</h3>
+                <p>Status: ${entry.type}</p>
+                <p>Waktu: ${new Date(entry.created_at).toLocaleString()}</p>
+                <p>Lokasi: ${entry.location ?? '-'}</p>
+            </div>
+        `).join('');
+    } else {
+        document.getElementById('staffList').innerHTML = '<p class="text-gray-500">Tidak ada data absensi.</p>';
+    }
+}
+
+
+            // Logout Function
+            window.handleLogout = async () => {
+                const { error } = await supabase.auth.signOut();
+                if (error) showToast(error.message, 'error');
+                else {
+                    document.querySelectorAll('[id$="Dashboard"]').forEach(el => el.classList.add('hidden'));
+                    document.getElementById('loginPage').classList.remove('hidden');
+                }
+            }
+
+            // Attendance Functions
+            window.absen = async (type) => {
+                const button = document.getElementById(`${type}Text`);
+                const spinner = document.getElementById(`${type}Spinner`);
+                
+                try {
+                    button.disabled = true;
+                    spinner.classList.remove('hidden');
+
+                    const { lat, lng } = await getLocation();
+                    const { error } = await supabase
+                        .from('absensi')
+                        .insert([{ 
+                            type,
+                            location: `POINT(${lng} ${lat})`,
+                            user_id: (await supabase.auth.getUser()).data.user.id
+                        }]);
+
+                    if (error) throw error;
+                    showToast(`Absen ${type} berhasil!`);
+
+                } catch (error) {
+                    showToast(`Gagal absen: ${error.message}`, 'error');
+                } finally {
+                    button.disabled = false;
+                    spinner.classList.add('hidden');
+                }
+            }
+
+            // Admin Functions
+            async function showAdminDashboard() {
+                document.getElementById('loginPage').classList.add('hidden');
+                document.getElementById('adminDashboard').classList.remove('hidden');
+                
+                initMap();
+                initChart();
+                loadStaffLocations();
+                setupRealtime();
+            }
+
+            function initMap() {
+                map = L.map('map').setView([-6.2, 106.8], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            }
+
+            async function initChart() {
+                const { data } = await supabase
+                    .from('absensi')
+                    .select('created_at, type')
+                    .order('created_at', { ascending: true });
+
+                const ctx = document.getElementById('attendanceChart').getContext('2d');
+                attendanceChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.map(d => new Date(d.created_at).toLocaleDateString()),
+                        datasets: [{
+                            label: 'Jumlah Absensi',
+                            data: data.map(d => 1),
+                            backgroundColor: 'rgba(99, 102, 241, 0.5)'
+                        }]
+                    }
+                });
+            }
+
+            function updateMap(locations) {
+                markers.forEach(marker => map.removeLayer(marker));
+                markers = [];
+
+                locations.forEach(loc => {
+                    const [lng, lat] = loc.location.replace('POINT(', '').replace(')', '').split(' ');
+                    const marker = L.marker([lat, lng]).addTo(map);
+                    markers.push(marker);
+                });
+            }
+
+            function setupRealtime() {
+                supabase
+                    .channel('absensi-channel')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'absensi' }, 
+                        () => loadStaffLocations())
+                    .subscribe();
+            }
+
+            async function loadStaffLocations() {
+                const { data, error } = await supabase
+                    .from('absensi')
+                    .select(`
+                        type,
+                        location,
+                        created_at,
+                        profiles:user_id (name)
+                    `)
+                    .order('created_at', { ascending: false });
+
+                if (!error) {
+                    updateMap(data);
+                    const staffList = document.getElementById('staffList');
+                    staffList.innerHTML = data.map(entry => `
+                        <div class="bg-white p-4 rounded-lg shadow animate-fade-in">
+                            <h3 class="font-bold">${entry.profiles.name}</h3>
+                            <p>Status: ${entry.type}</p>
+                            <p>Waktu: ${new Date(entry.created_at).toLocaleString()}</p>
+                            <p>Lokasi: ${entry.location}</p>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Petugas Functions
+            async function showPetugasDashboard() {
+                document.getElementById('loginPage').classList.add('hidden');
+                document.getElementById('petugasDashboard').classList.remove('hidden');
+                const user = (await supabase.auth.getUser()).data.user;
+                document.getElementById('userGreeting').textContent = `Halo, ${user.email}`;
+            }
+
+            // Utilities
+            async function getLocation() {
+                return new Promise((resolve, reject) => {
+                    if (!navigator.geolocation) reject('Geolocation tidak didukung');
+                    
+                    navigator.geolocation.getCurrentPosition(
+                        position => resolve({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        }),
+                        error => reject(`Error geolocation: ${error.message}`)
+                    );
+                });
+            }
+        });
+    </script>
+
+</body>
+</html>
